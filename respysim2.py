@@ -88,12 +88,15 @@ Pmat[0,:] = res_props['pi']
 def kbar(kdown,kup): #kdown is the downstream-pressure perm, kup is the upstream-pressure perm
     return 2*kdown*kup/(kup +kdown)
 
-def bo(self, boi,p):
-    return  boi* np.exp(-self.c_0 * (p - self.pi))
+def bo(boi,co,pi):
+    def func(p):
+        return  boi* np.exp(-co * (p - pi))
+    return func
 
-
-def bw(self, p):
-    return self.Bwi * np.exp(-self.c_w * (p - self.pi))
+def bw(bwi, cw, pi):
+    def func(p):
+        return bwi* np.exp(-cw * (p - pi))
+    return func
 
 def kro(self, Sw):
     return 1.77 * (1 - Sw) ** 2 if 0.25 < Sw <= 1 else 1
@@ -102,12 +105,12 @@ def kro(self, Sw):
 def krw(self, Sw):
     return 2.37 * (Sw - 0.25) ** 3 if 0.25 < Sw <= 1 else 0
 
-def mobility(Swup,pdown,pup,kdown,kup,bi,fluid):
+def mobility(Swup,pdown,pup,kdown,kup,b,fluid): #b is a function here
     p=(pdown+pup)/2
     if fluid == 'w':
-        return kbar(kdown,kup)*krw(Swup)/bw(bi,p)
-    if fluid == 'o':
-        return kbar(kdown,kup)*kro(Swup)/bw(bi,p)
+        return kbar(kdown,kup)*krw(Swup)/b(p)
+    else if fluid == 'o':
+        return kbar(kdown,kup)*kro(Swup)/b(p)
 
 def compressibility(cf,co,cw): #total compressibility. This returns a function
      def func(so,sw):
