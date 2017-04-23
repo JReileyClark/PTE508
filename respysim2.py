@@ -158,13 +158,25 @@ Pmat[0,0,4] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p(Pmat[0,0,0]))
 Pmat[0,1:,4] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,1:,0]))
 
 #Initialize Right Node Lambda o East
-Pmat[0,-1,6] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
+Pmat[0,-1,5] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda o Easts
-Pmat[0,:-1,6] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,1:,0]))
+Pmat[0,:-1,5] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
-#Intialize Right  Lambda w East
-Pmat[0,-1,]
+
+#Initialize Left Node Lambda w West
+Pmat[0,0,6] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
+
+#Initialize Remaining Lambda w Wests
+Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,1:,0]))
+
+#Initialize Right Node Lambda w East
+Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
+
+#Initialize Remaining Lambda w Easts
+Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
+
+
 # Sw_mat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N']))
 # Sw_mat[0,:-1] = res_props['Swi']
 # Sw_mat[0,-1] = res_props['Sawi']
