@@ -1,5 +1,6 @@
 import numpy as np
-
+from tdma import tdma
+from scipy import sparse as sp
 
 # class Reservoir(object):
 #     def __init__(self, N=None,rw=None,re=None, h=None, pi=None, pa=None,pwf=None,k=None,phi=None,muo=None,muw=None,c_phi=None,c_o=None,c_w=None, Boi=None, Bwi=None, Swi=None, Sawi=None, BC=None):
@@ -132,8 +133,9 @@ def phi(phii,c_phi,pi):
 delchi = dchi(sim_props['N'],res_props['rw'],res_props['re'])
 chi = chinodes(sim_props['N'],delchi,res_props['rw'])
 
-#constructing the matrix of pressures our simulation results will go into
-Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],12))
+print(delchi)
+print(chi)
+
 
 #setting the outer columns (boundaries) to their respective conditions
 #Pmat[:,0] = res_props['BC'][0]
@@ -144,6 +146,22 @@ bo_p = bo(res_props['Boi'],res_props['c_o'],res_props['pi'])
 bw_p = bw(res_props['Bwi'],res_props['c_w'], res_props['pi'])
 phi_p = phi(res_props['phii'],res_props['c_phi'],res_props['pi'])
 ct = compressibility(res_props['c_phi'],res_props['c_o'],res_props['c_w'])
+
+#constructing the matrix of pressures our simulation results will go into
+Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],12))
+
+#0 Pressure
+#1 Sw
+#2 Kro
+#3 Krw
+#4 Bo
+#5 Bw
+#6 Lambda_oW
+#7 Lambda_oE
+#8 Lambda_wW
+#9 Lambda_wE
+#10 Phi
+#11 Ct
 
 #setting the initial condition (t=0)
 Pmat[0 , : , 0] = res_props['pi']
@@ -157,30 +175,30 @@ Pmat[0,:,4] = bo_p(Pmat[0,:,0])
 #Initialize Bw
 Pmat[0,:,5] = bw_p(Pmat[0,:,0])
 
-#Initialize Left Node Lambda o West
+#Initialize Left Node Lambda o West0
 Pmat[0,0,6] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p(Pmat[0,0,0]))
 
 #Initialize Remaining Lambda o Wests
-Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,1:,0]))
+Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 #Initialize Right Node Lambda o East
 Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda o Easts
-Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,:-1,0]))
+Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 
 #Initialize Left Node Lambda w West
 Pmat[0,0,8] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
 
 #Initialize Remaining Lambda w Wests
-Pmat[0,1:,8] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,1:,0]))
+Pmat[0,1:,8] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 #Initialize Right Node Lambda w East
 Pmat[0,-1,9] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda w Easts
-Pmat[0,:-1,9] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,:-1,0]))
+Pmat[0,:-1,9] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 #Initialize phi
 Pmat[0,:,10] = phi_p(Pmat[0,:,0])
@@ -188,6 +206,44 @@ Pmat[0,:,10] = phi_p(Pmat[0,:,0])
 #Initialize ct
 Pmat[0,:,11] = ct(Pmat[0,:,1],1 - Pmat[0,:,1])
 
+#Solving for pressure
+# for i in range(sim_props['T']/sim_props['tstep'])
+
+i=0
+alpha = (158*np.exp(2*chi[1:-1])*Pmat[i,:,10]*Pmat[i,:,11]*(delchi**2))
+alpha[0] *= 3
+alpha[-1] *= 3
+print(chi[1:-1])
+print("ALPHA: \n", alpha)
+A = Pmat[i,:,6]*Pmat[i,:,4] + Pmat[i,:,8]*Pmat[i,:,5]
+A[-1] *=4
+B = -(Pmat[i,:,4]*(Pmat[i,:,6] + Pmat[i,:,7]) + Pmat[i,:,5]*(Pmat[i,:,8] + Pmat[i,:,9]))
+B[0] =  -(Pmat[i,0,4]*(8*Pmat[i,0,6] + 4*Pmat[i,0,7]) + Pmat[i,0,5]*(8*Pmat[i,0,8] + 4*Pmat[i,0,9]))
+B[-1] = -(Pmat[i,-1,4]*(4*Pmat[i,-1,6] + 8*Pmat[i,-1,7]) + Pmat[i,-1,5]*(4*Pmat[i,-1,8] + 8*Pmat[i,-1,9]))
+B += alpha
+C =  Pmat[i,:,7]*Pmat[i,:,4] + Pmat[i,:,9]*Pmat[i,:,5]
+C[0] *= 4
+D = -alpha*Pmat[i,:,0]
+print(D)
+D[0] -= 8*((Pmat[i,0,6]*Pmat[i,0,4]) + (Pmat[i,0,8]*Pmat[i,0,5]))*res_props['pwf']
+print(D)
+D[-1] -= 8*((Pmat[i,-1,7]*Pmat[i,-1,4]) + (Pmat[i,-1,9]*Pmat[i,-1,5]))*res_props['pa']
+print(D)
+E = tdma(A,B,C,D)
+print("E: \n",E)
+F = np.eye(11,k=-1)*A + np.eye(11,k=0)*B + np.eye(11,k=1)*C
+print("NP LINALG SOLVE SOLUTION: \n",np.linalg.solve(F,D))
+for i in range(12):
+    print(Pmat[0,:,i])
+#Test = np.linalg.solve(E,D)
+#print(Test)
+#Pmat[i+1,:,0]= tdma(A,B,C,D)
+#print(Pmat[i+1,:,0])
+print(A)
+print(B)
+print(C)
+print(D)
+print(Pmat[i,:,6])
 # Sw_mat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N']))
 # Sw_mat[0,:-1] = res_props['Swi']
 # Sw_mat[0,-1] = res_props['Sawi']
