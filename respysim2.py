@@ -104,9 +104,9 @@ def mobility(Swup,pdown,pup,kdown,kup,b,mu,fluid): #b is a function here
     elif fluid == 'o':
         return kbar(kdown,kup)*kro(Swup)/(mu*b(p))
 
-def compressibility(cf,co,cw): #total compressibility. This returns a function
-     def func(so,sw):
-        return cf + co*so + cw*sw
+def compressibility(c_phi,co,cw): #total compressibility. This returns a function
+     def func(sw,so):
+        return c_phi + co*so + cw*sw
      return func
 
 def ra(re,dchi):
@@ -128,13 +128,12 @@ def phi(phii,c_phi,pi):
         return phii*np.exp(c_phi*(p-pi))
     return func
 
-#initialize the closure, compressibility. ct is a function that takes so and sw as parameters
-ct = compressibility(res_props['c_phi'],res_props['c_o'],res_props['c_w'])
+#Initialize nodes
 delchi = dchi(sim_props['N'],res_props['rw'],res_props['re'])
 chi = chinodes(sim_props['N'],delchi,res_props['rw'])
 
 #constructing the matrix of pressures our simulation results will go into
-Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],10))
+Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],12))
 
 #setting the outer columns (boundaries) to their respective conditions
 #Pmat[:,0] = res_props['BC'][0]
@@ -143,6 +142,8 @@ Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],10))
 #intialize closures
 bo_p = bo(res_props['Boi'],res_props['c_o'],res_props['pi'])
 bw_p = bw(res_props['Bwi'],res_props['c_w'], res_props['pi'])
+phi_p = phi(res_props['phii'],res_props['c_phi'],res_props['pi'])
+ct = compressibility(res_props['c_phi'],res_props['c_o'],res_props['c_w'])
 
 #setting the initial condition (t=0)
 Pmat[0 , : , 0] = res_props['pi']
@@ -151,31 +152,41 @@ Pmat[0,-1,1] = res_props['Sawi']
 Pmat[0,:,2] = [kro(x) for x in Pmat[0,:,1]]
 Pmat[0,:,3] = [krw(x) for x in Pmat[0,:,1]]
 
+#Initialize Bo
+Pmat[0,:,4] = bo_p(Pmat[0,:,0])
+#Initialize Bw
+Pmat[0,:,5] = bw_p(Pmat[0,:,0])
+
 #Initialize Left Node Lambda o West
-Pmat[0,0,4] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p(Pmat[0,0,0]))
+Pmat[0,0,6] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p(Pmat[0,0,0]))
 
 #Initialize Remaining Lambda o Wests
-Pmat[0,1:,4] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,1:,0]))
+Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,1:,0]))
 
 #Initialize Right Node Lambda o East
-Pmat[0,-1,5] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
+Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda o Easts
-Pmat[0,:-1,5] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
+Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p(Pmat[0,:-1,0]))
 
 
 #Initialize Left Node Lambda w West
-Pmat[0,0,6] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
+Pmat[0,0,8] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
 
 #Initialize Remaining Lambda w Wests
-Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,1:,0]))
+Pmat[0,1:,8] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,1:,0]))
 
 #Initialize Right Node Lambda w East
-Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
+Pmat[0,-1,9] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda w Easts
-Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
+Pmat[0,:-1,9] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p(Pmat[0,:-1,0]))
 
+#Initialize phi
+Pmat[0,:,10] = phi_p(Pmat[0,:,0])
+
+#Initialize ct
+Pmat[0,:,11] = ct(Pmat[0,:,1],1 - Pmat[0,:,1])
 
 # Sw_mat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N']))
 # Sw_mat[0,:-1] = res_props['Swi']
