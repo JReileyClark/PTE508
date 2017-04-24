@@ -54,12 +54,12 @@ import operator
 
 #Define Reservoir  Properties
 res_props = dict(rw=100, #wellbore radius
-                 re=3000, #reservoir radius
+                 re=1500, #reservoir radius
                  h=50, #reservoir thickness
                  pi=3000, #initial pressure
                  pa=3000, #pressure at the aquifer
                  pwf=1000,#pressure at the wellbore
-                 k=100,#permeability (isotropic)
+                 k=10,#permeability (isotropic)
                  phii=0.2,#porosity
                  muo=2, #oil viscosity, cp
                  muw=1, #water viscosity, cp
@@ -135,13 +135,11 @@ delchi = dchi(sim_props['N'],res_props['rw'],res_props['re'])
 chi = chinodes(sim_props['N'],delchi,res_props['rw'])
 
 print(delchi)
-print(chi)
+print(chi,chi.shape)
 print(np.exp(chi))
 print(ra(1500,delchi))
 
-#setting the outer columns (boundaries) to their respective conditions
-#Pmat[:,0] = res_props['BC'][0]
-#Pmat[:,-1] = res_props['BC'][1]
+
 
 #intialize closures
 bo_p = bo(res_props['Boi'],res_props['c_o'],res_props['pi'])
@@ -151,7 +149,8 @@ ct = compressibility(res_props['c_phi'],res_props['c_o'],res_props['c_w'])
 
 #constructing the matrix of pressures our simulation results will go into
 Pmat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N'],12))
-
+print(Pmat.shape)
+print(Pmat[0,1:-1,0].shape)
 #0 Pressure
 #1 Sw
 #2 Kro
@@ -191,7 +190,7 @@ print("Pmat[i,:,6], Lambda_o West: \n",Pmat[0,:,6])
 Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda o Easts
-Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
+Pmat[0,:-1,7] = res_props['k']*Pmat[0,:-1,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 print("Pmat[i,:,7], Lambda_o East: \n",Pmat[0,:,7])
 
 #Initialize Left Node Lambda w West
@@ -204,7 +203,7 @@ Pmat[0,1:,8] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] 
 Pmat[0,-1,9] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda w Easts
-Pmat[0,:-1,9] = res_props['k']*Pmat[0,1:,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
+Pmat[0,:-1,9] = res_props['k']*Pmat[0,:-1,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 #Initialize phi
 Pmat[0,:,10] = phi_p(Pmat[0,:,0])
@@ -216,28 +215,30 @@ Pmat[0,:,11] = ct(Pmat[0,:,1],1 - Pmat[0,:,1])
 # for i in range(sim_props['T']/sim_props['tstep'])
 
 for i in range(30):
-    #PRESSURE CALCULATION STEP
+    ################ PRESSURE CALCULATION STEP ################################
     alpha = (158*np.exp(2*chi[1:-1])*Pmat[i,:,10]*Pmat[i,:,11]*(delchi*delchi))
     alpha[0] *= 3
     alpha[-1] *= 3
     #print(chi[1:-1])
-    #print("ALPHA: \n", alpha)
+    print("ALPHA: \n", alpha)
+    print("SW: \n", Pmat[i,:,1])
+    print("CT:  \n", Pmat[i,:,11])
     #print("ALPHA[0]: \n", alpha[0])
     #print("ALPHA[-1]: \n", alpha[-1])
-    A = Pmat[i,:,6]*Pmat[i,:,4] + Pmat[i,:,8]*Pmat[i,:,5]
+    A = Pmat[i,1:,6]*Pmat[i,1:,4] + Pmat[i,1:,8]*Pmat[i,1:,5]
     A[-1] *=4
     B = -(Pmat[i,:,4]*(Pmat[i,:,6] + Pmat[i,:,7]) + Pmat[i,:,5]*(Pmat[i,:,8] + Pmat[i,:,9]))
     B[0] =  -(Pmat[i,0,4]*(8*Pmat[i,0,6] + 4*Pmat[i,0,7]) + Pmat[i,0,5]*(8*Pmat[i,0,8] + 4*Pmat[i,0,9]))
     B[-1] = -(Pmat[i,-1,4]*(4*Pmat[i,-1,6] + 8*Pmat[i,-1,7]) + Pmat[i,-1,5]*(4*Pmat[i,-1,8] + 8*Pmat[i,-1,9]))
     B -= alpha
     #print(B)
-    C =  Pmat[i,:,7]*Pmat[i,:,4] + Pmat[i,:,9]*Pmat[i,:,5]
+    C =  Pmat[i,:-1,7]*Pmat[i,:-1,4] + Pmat[i,:-1,9]*Pmat[i,:-1,5]
     C[0] *= 4
     D = -alpha*Pmat[i,:,0]
     #print(D)
     D[0] -= 8*(((Pmat[i,0,6]*Pmat[i,0,4]) + (Pmat[i,0,8]*Pmat[i,0,5]))*res_props['pwf'])
     #print(D)
-    D[-1] -= 8*(((Pmat[i,-1,6]*Pmat[i,-1,4]) + (Pmat[i,-1,9]*Pmat[i,-1,5]))*res_props['pi'])
+    D[-1] -= 8*(((Pmat[i,-1,7]*Pmat[i,-1,4]) + (Pmat[i,-1,9]*Pmat[i,-1,5]))*res_props['pi'])
     #print(D)
     E = tdma(A,B,C,D)
     #print("E: \n",E)
@@ -245,19 +246,31 @@ for i in range(30):
     #print("NP LINALG SOLVE SOLUTION: \n",np.linalg.solve(F,D))
     Pmat[i+1,:,0] = E
     ###########VALUE UPDATE STEPS########################
-    Pmat[i+1,0,1] = (Pmat[i,0,5]/Pmat[i,0,10])*((Pmat[i,0,10]*Pmat[i,0,2]/Pmat[i,0,5]) + (8*Pmat[i,0,8]*res_props['pwf'] - (8*Pmat[i,0,8] + 4*Pmat[i,0,9])*Pmat[i,0,0] + 4*Pmat[i,0,9]*Pmat[i,1,0])/(158*np.log(2*chi[1]*3*delchi**2)))
-    Pmat[i+1, 1:-1, 1] = (Pmat[i, 1:-1, 5] / Pmat[i, 1:-1, 10]) * ((Pmat[i, 1:-1, 10] * Pmat[i, 1:-1, 2] / Pmat[i, 1:-1, 5]) + (
-                         Pmat[i, 1:-1, 8] * Pmat[i,:-2,0] - ( Pmat[i, 1:-1, 8] + Pmat[i, 1:-1, 9]) * Pmat[i, 1:-1, 0] + Pmat[i, 1:-1, 9] *
-                        Pmat[i, 2:, 0]) / (158 * np.log(2 * chi[2:-2] * delchi ** 2)))
+    print((Pmat[i, 1:, 0] + Pmat[i, :-1, 0])/2)
+    # Update phi
+    Pmat[i+1, :, 10] = phi_p(Pmat[i+1, :, 0])
+    # Update Bo
+    Pmat[i+1, :, 4] = bo_p(Pmat[i+1, :, 0])
+    # Update Bw
+    Pmat[i+1, :, 5] = bw_p(Pmat[i+1, :, 0])
+    #Update Sw
+    Pmat[i+1,0,1] = (Pmat[i+1,0,5]/Pmat[i+1,0,10])*((Pmat[i,0,10]*Pmat[i,0,1]/Pmat[i,0,5]) +
+                    (8*Pmat[i,0,8]*res_props['pwf'] - (8*Pmat[i,0,8] + 4*Pmat[i,0,9])*Pmat[i+1,0,0] +
+                    4*Pmat[i,0,9]*Pmat[i+1,1,0])/(158*np.exp(2*chi[1])*3*(delchi**2)))
+
+    Pmat[i+1,1:-1,1] = (Pmat[i+1, 1:-1, 5] / Pmat[i+1, 1:-1, 10]) * ((Pmat[i, 1:-1, 10] * Pmat[i, 1:-1, 1] / Pmat[i, 1:-1, 5]) +
+                         (Pmat[i, 1:-1, 8] * Pmat[i+1,:-2,0] - ( Pmat[i, 1:-1, 8] + Pmat[i, 1:-1, 9]) * Pmat[i+1, 1:-1, 0] + Pmat[i, 1:-1, 9]
+                         *Pmat[i+1, 2:, 0]) / (158 * np.exp(2 * chi[2:-2]) * (delchi ** 2)))
     Pmat[i+1,-1,1] = 1
-    Pmat[i+1, :, 2] = [kro(x) for x in Pmat[0, :, 1]]
-    Pmat[i+1, :, 3] = [krw(x) for x in Pmat[0, :, 1]]
+
+    Pmat[i+1, :-1, 2] = [kro(x) for x in Pmat[i+1, 1:, 1]]
+    Pmat[i+1, :-1, 3] = [krw(x) for x in Pmat[i+1, 1:, 1]]
+    Pmat[i+1,-1,2] = 0
+    Pmat[i+1,-1,3] = 1
     #print("KRO: \n", Pmat[0, :, 2])
     #print("KRW: \n", Pmat[0, :, 3])
-    # Initialize Bo
-    Pmat[i+1, :, 4] = bo_p(Pmat[0, :, 0])
-    # Initialize Bw
-    Pmat[i+1, :, 5] = bw_p(Pmat[0, :, 0])
+
+
 
     # Initialize Left Node Lambda o West
     Pmat[i+1, 0, 6] = res_props['k'] * Pmat[i+1, 0, 2] / (res_props['muo'] * bo_p(Pmat[i+1, 0, 0]))
@@ -265,28 +278,27 @@ for i in range(30):
     Pmat[i+1, 1:, 6] = res_props['k'] * Pmat[i+1, 1:, 2] / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
     #print("Pmat[i,:,6], Lambda_o West: \n", Pmat[i+1, :, 6])
     # Initialize Right Node Lambda o East
-    Pmat[i+1, -1, 7] = res_props['k'] * Pmat[i+1, -1, 2] / (res_props['muo'] * bo_p(Pmat[i+1, -1, 0]))
+    Pmat[i+1, -1, 7] = res_props['k'] * Pmat[i+1, -1, 2] / (res_props['muo'] * bo_p(Pmat[0, -1, 0]))
 
     # Initialize Remaining Lambda o Easts
     Pmat[i+1, :-1, 7] = res_props['k'] * Pmat[i+1, 1:, 2] / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
     #print("Pmat[i,:,7], Lambda_o East: \n", Pmat[i+1, :, 7])
 
-    # Initialize Left Node Lambda w West
+    # Update Left Node Lambda w West
     Pmat[i+1, 0, 8] = res_props['k'] * Pmat[i+1, 0, 3] / (res_props['muw'] * bw_p(Pmat[i+1, 0, 0]))
 
-    # Initialize Remaining Lambda w Wests
-    Pmat[i+1, 1:, 8] = res_props['k'] * Pmat[i+1, 1:, 3] / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    # Update Remaining Lambda w Wests
+    Pmat[i+1, 1:, 8] = res_props['k'] * Pmat[i+1, 1:, 3] / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[0, :-1, 0]) / 2))
 
-    # Initialize Right Node Lambda w East
-    Pmat[i+1, -1, 9] = res_props['k'] * Pmat[i+1, -1, 3] / (res_props['muw'] * bw_p(Pmat[i+1, -1, 0]))
+    # Update Right Node Lambda w East
+    Pmat[i+1, -1, 9] = res_props['k'] * Pmat[i+1, -1, 3] / (res_props['muw'] * bw_p(3000))
 
-    # Initialize Remaining Lambda w Easts
-    Pmat[i+1, :-1, 9] = res_props['k'] * Pmat[i+1, 1:, 3] / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    # Update Remaining Lambda w Easts
+    Pmat[i+1, :-1, 9] = res_props['k'] * Pmat[i+1, 1:, 3] / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[0, :-1, 0]) / 2))
 
-    # Initialize phi
-    Pmat[i+1, :, 10] = phi_p(Pmat[i+1, :, 0])
 
-    # Initialize ct
+
+    # Update ct
     Pmat[i+1, :, 11] = ct(Pmat[i+1, :, 1], 1 - Pmat[i+1, :, 1])
     ############################################################################################
 #pl.plot(chi[1:-1],E)
