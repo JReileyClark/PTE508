@@ -2,6 +2,7 @@ import numpy as np
 from tdma import tdma
 from scipy import sparse as sp
 from matplotlib import pyplot as pl
+import operator
 # class Reservoir(object):
 #     def __init__(self, N=None,rw=None,re=None, h=None, pi=None, pa=None,pwf=None,k=None,phi=None,muo=None,muw=None,c_phi=None,c_o=None,c_w=None, Boi=None, Bwi=None, Swi=None, Sawi=None, BC=None):
 #         self.N = N
@@ -52,7 +53,7 @@ from matplotlib import pyplot as pl
 
 
 #Define Reservoir  Properties
-res_props = dict(rw=0.25, #wellbore radius
+res_props = dict(rw=100, #wellbore radius
                  re=1500, #reservoir radius
                  h=50, #reservoir thickness
                  pi=3000, #initial pressure
@@ -73,7 +74,7 @@ res_props = dict(rw=0.25, #wellbore radius
 
 sim_props = dict(T=30, #total time into the future to simulation
                  tstep=1, # time step size
-                 N=11) # number of nodes (1d)
+                 N=4) # number of nodes (1d)
 
 
 #constructing functions for mobility calculations
@@ -135,7 +136,8 @@ chi = chinodes(sim_props['N'],delchi,res_props['rw'])
 
 print(delchi)
 print(chi)
-
+print(np.exp(chi))
+print(ra(1500,delchi))
 
 #setting the outer columns (boundaries) to their respective conditions
 #Pmat[:,0] = res_props['BC'][0]
@@ -169,24 +171,26 @@ Pmat[0,:-1,1] = res_props['Swi']
 Pmat[0,-1,1] = res_props['Sawi']
 Pmat[0,:,2] = [kro(x) for x in Pmat[0,:,1]]
 Pmat[0,:,3] = [krw(x) for x in Pmat[0,:,1]]
-
+#Pmat[0,-1,2] = kro(Pmat[0,-1,1])
+Pmat[0,-1,3] = 1 #krw(Pmat[0,-1,1])
+print("KRO: \n",Pmat[0,:,2])
+print("KRW: \n", Pmat[0,:,3])
 #Initialize Bo
 Pmat[0,:,4] = bo_p(Pmat[0,:,0])
 #Initialize Bw
 Pmat[0,:,5] = bw_p(Pmat[0,:,0])
 
-#Initialize Left Node Lambda o West0
+#Initialize Left Node Lambda o West
 Pmat[0,0,6] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p(Pmat[0,0,0]))
-
 #Initialize Remaining Lambda o Wests
 Pmat[0,1:,6] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
-print("Pmat[i,:,6], Bo: \n",Pmat[0,:,6])
+print("Pmat[i,:,6], Lambda_o West: \n",Pmat[0,:,6])
 #Initialize Right Node Lambda o East
 Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(Pmat[0,-1,0]))
 
 #Initialize Remaining Lambda o Easts
 Pmat[0,:-1,7] = res_props['k']*Pmat[0,1:,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
-
+print("Pmat[i,:,7], Lambda_o East: \n",Pmat[0,:,7])
 
 #Initialize Left Node Lambda w West
 Pmat[0,0,8] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p(Pmat[0,0,0]))
@@ -210,12 +214,13 @@ Pmat[0,:,11] = ct(Pmat[0,:,1],1 - Pmat[0,:,1])
 # for i in range(sim_props['T']/sim_props['tstep'])
 
 i=0
-alpha = (158*np.exp(2*chi[1:-1])*Pmat[i,:,10]*Pmat[i,:,11]*(delchi**2))
+alpha = (158*np.exp(2*chi[1:-1])*Pmat[i,:,10]*Pmat[i,:,11]*(delchi*delchi))
 alpha[0] *= 3
 alpha[-1] *= 3
 print(chi[1:-1])
 print("ALPHA: \n", alpha)
-
+print("ALPHA[0]: \n", alpha[0])
+print("ALPHA[-1]: \n", alpha[-1])
 A = Pmat[i,:,6]*Pmat[i,:,4] + Pmat[i,:,8]*Pmat[i,:,5]
 A[-1] *=4
 
@@ -227,15 +232,15 @@ print(B)
 C =  Pmat[i,:,7]*Pmat[i,:,4] + Pmat[i,:,9]*Pmat[i,:,5]
 C[0] *= 4
 D = -alpha*Pmat[i,:,0]
-print(D)
-D[0] -= 8*((Pmat[i,0,6]*Pmat[i,0,4]) + (Pmat[i,0,8]*Pmat[i,0,5]))*res_props['pwf']
-print(D)
-D[-1] -= 8*((Pmat[i,-1,7]*Pmat[i,-1,4]) + (Pmat[i,-1,9]*Pmat[i,-1,5]))*res_props['pa']
+#print(D)
+D[0] -= 8*(((Pmat[i,0,6]*Pmat[i,0,4]) + (Pmat[i,0,8]*Pmat[i,0,5]))*res_props['pwf'])
+#print(D)
+D[-1] -= 8*(((Pmat[i,-1,6]*Pmat[i,-1,4]) + (Pmat[i,-1,9]*Pmat[i,-1,5]))*res_props['pi'])
 print(D)
 E = tdma(A,B,C,D)
 print("E: \n",E)
-#F = np.eye(11,k=-1)*A + np.eye(11,k=0)*B + np.eye(11,k=1)*C
-#print("NP LINALG SOLVE SOLUTION: \n",np.linalg.solve(F,D))
+F = np.eye(sim_props['N'],k=-1)*A + np.eye(sim_props['N'],k=0)*B + np.eye(sim_props['N'],k=1)*C
+print("NP LINALG SOLVE SOLUTION: \n",np.linalg.solve(F,D))
 
 pl.plot(chi[1:-1],E)
 pl.show()
@@ -245,10 +250,10 @@ for j in range(12):
 #print(Test)
 #Pmat[i+1,:,0]= tdma(A,B,C,D)
 #print(Pmat[i+1,:,0])
-print(A)
-print(B)
-print(C)
-print(D)
+print("A \n",A)
+print("B \n",B)
+print("C \n",C)
+print("D \n",D)
 print("Pmat[i,:,6], Bo: \n",Pmat[i,:,6])
 # Sw_mat = np.zeros((sim_props['T']//sim_props['tstep']+1,sim_props['N']))
 # Sw_mat[0,:-1] = res_props['Swi']
@@ -258,7 +263,7 @@ print("Pmat[i,:,6], Bo: \n",Pmat[i,:,6])
 print("Initial Sw: \n",Pmat[0,:,1])
 print("Nodes in Chi space: ", chi,"Nodes in r space: ", np.exp(chi), sep='\n')
 print("Initial Pressures: \n",Pmat[0,:,0])
-print("All Initial Conditions: ",Pmat[0,:,:], sep=' \n')
+
 
 
 
