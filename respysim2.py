@@ -349,23 +349,23 @@ for i in range(sim_props['T']):
 #print(Pmat[:,:,8])
 
 colormap = mpl.cm.gist_ncar
-pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
-for i,row in enumerate(Pmat[:,:,0]):
-    pl.plot(chi,[1000,*row,3000], label='t = {}'.format(i))
-pl.title('Pressure, T = {}'.format(sim_props['T']))
-pl.xlabel(r'$\chi$')
-pl.ylabel('Pressure')
-pl.legend(prop={'size':6}, ncol=4,loc='best')
-pl.show()
-
-pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
-for i,row in enumerate(Pmat[:,:,0]):
-    pl.plot(np.exp(chi),[1000,*row,3000], label='t = {}'.format(i))
-pl.title('Pressure, T = {}'.format(sim_props['T']))
-pl.xlabel('R')
-pl.ylabel('Pressure')
-pl.legend(prop={'size':6},ncol=4, loc='best')
-pl.show()
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for i,row in enumerate(Pmat[:,:,0]):
+#     pl.plot(chi,[1000,*row,3000], label='t = {}'.format(i))
+# pl.title('Pressure, T = {}'.format(sim_props['T']))
+# pl.xlabel(r'$\chi$')
+# pl.ylabel('Pressure')
+# pl.legend(prop={'size':6}, ncol=4,loc='best')
+# pl.show()
+#
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for i,row in enumerate(Pmat[:,:,0]):
+#     pl.plot(np.exp(chi),[1000,*row,3000], label='t = {}'.format(i))
+# pl.title('Pressure, T = {}'.format(sim_props['T']))
+# pl.xlabel('R')
+# pl.ylabel('Pressure')
+# pl.legend(prop={'size':6},ncol=4, loc='best')
+# pl.show()
 
 # pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
 # for row in Pmat[:,:,1]:
@@ -403,19 +403,67 @@ qw = q(res_props['k'],krw(Pmat[1:,0,1]),res_props['h'],res_props['muw'],bw_p(Pma
 print(qw)
 print(qo)
 WOR = qw/qo
-pl.plot(qo)
-pl.plot(qw)
+fw = qw/(qw+qo)
+pl.plot(qo, label='qo',c='g')
+pl.plot(qw, label='qw', c='b')
 pl.xlabel('time')
 pl.ylabel('Q')
 pl.legend()
 pl.title('Rate vs Time')
 pl.show()
 
-pl.plot(WOR)
+pl.plot(WOR, label='WOR')
 pl.title('WOR vs Time')
+pl.legend()
+pl.xlabel('Time in Days')
+pl.ylabel('WOR')
 pl.show()
-print(Pmat[:,:,8])
-print(type(res_props['pwf']))
+
+pl.plot(fw, label='fw')
+pl.title('fw vs Time')
+pl.legend()
+pl.xlabel('Time in Days')
+pl.ylabel('fw')
+pl.show()
+
+
+print(f"Fw: {fw}")
+print(type(fw))
+print(np.argwhere(fw > 0.1).min())
+T_bt = np.argwhere(fw > 0.1).min()
+
+
+pl.plot(np.exp(chi[1:-1]),Pmat[1,:,1], label='Sw @ T = 1')
+pl.plot(np.exp(chi[1:-1]),Pmat[10,:,1], label='Sw @ T = 10')
+pl.plot(np.exp(chi[1:-1]),Pmat[T_bt,:,1], label=f'Sw @ T = {T_bt}')
+pl.plot(np.exp(chi[1:-1]),1-Pmat[1,:,1], label='So @ T = 1')
+pl.plot(np.exp(chi[1:-1]),1-Pmat[10,:,1], label='So @ T = 10')
+pl.plot(np.exp(chi[1:-1]),1-Pmat[T_bt,:,1], label=f'So @ T = {T_bt}')
+pl.title('Sw and So vs r')
+pl.legend(ncol=2, loc='best',prop={'size':6})
+pl.xlabel('Radius')
+pl.ylabel('Saturation')
+pl.show()
+
+
+
+Np = qo[:T_bt +1].sum()
+OIIP = res_props['phii']*res_props['h']*((res_props['re'] - res_props['rw'])**2)*np.pi*(1-res_props['Swi'])/(5.615*res_props['Boi'])
+Rf = Np/OIIP
+print(f'Np = {Np} \nOIIP = {OIIP} \nRf = {Rf}')
+Swavg_bt = (Pmat[T_bt,:,1]*(np.exp(chi[1:-1] + 0.5*delchi) - np.exp(chi[1:-1] - 0.5*delchi))/(np.exp(chi[-1]) - np.exp(chi[1]))).sum()
+Phiavg_bt = (Pmat[T_bt,:,10]*(np.exp(chi[1:-1] + 0.5*delchi) - np.exp(chi[1:-1] - 0.5*delchi))/(np.exp(chi[-1]) - np.exp(chi[1]))).sum()
+Boavg_bt = (Pmat[T_bt,:,4]*(np.exp(chi[1:-1] + 0.5*delchi) - np.exp(chi[1:-1] - 0.5*delchi))/(np.exp(chi[-1]) - np.exp(chi[1]))).sum()
+print(f'Swavg_bt = {Swavg_bt}')
+OIP = Phiavg_bt*res_props['h']*((res_props['re']-res_props['rw'])**2)*np.pi*(1-Swavg_bt)/(5.615*Boavg_bt)
+print(f'OIP = {OIP}')
+print('OIP + Np = {}'.format(OIP+Np))
+print('Bo = {}'.format(Pmat[T_bt,:,4]))
+print('Boi = {}'.format(res_props['Boi']))
+print('Sw@bt = {}'.format(Pmat[T_bt,:,1]))
+print('Swavg_bt = {}'.format(Swavg_bt))
+print('Press_bt = {}'.format(Pmat[T_bt,:,0]))
+print(np.exp(chi))
 # if __name__ == '__main__':
 #     res_props = dict(N=10,rw=0.25,re=1500,h=50,pi=3000,pa=3000,pwf=1000,k=10,phi=0.2,muo=2,muw=1,c_phi=1.0e-5,c_o=1.5e-5,c_w=0.3e-5,Boi=1.25,Bwi=1.05,Swi=0.25,Sawi=1,BC=[1000,3000])
 #     print(res_props)
