@@ -2,6 +2,7 @@ import numpy as np
 from tdma import tdma
 from scipy import sparse as sp
 from matplotlib import pyplot as pl
+import matplotlib as mpl
 import operator
 # class Reservoir(object):
 #     def __init__(self, N=None,rw=None,re=None, h=None, pi=None, pa=None,pwf=None,k=None,phi=None,muo=None,muw=None,c_phi=None,c_o=None,c_w=None, Boi=None, Bwi=None, Swi=None, Sawi=None, BC=None):
@@ -72,9 +73,9 @@ res_props = dict(rw=100, #wellbore radius
                  Sawi=1, #initial water saturation in aquifer
                  BC=[1000,3000]) #pressure boundary conditions, [pwf, pe]
 
-sim_props = dict(T=365*2, #total time into the future to simulation
+sim_props = dict(T=1000, #total time into the future to simulation
                  tstep=1, # time step size
-                 N=50) # number of nodes (1d)
+                 N=11) # number of nodes (1d)
 
 
 #constructing functions for mobility calculations
@@ -130,6 +131,10 @@ def phi(phii,c_phi,pi):
         return phii*np.exp(c_phi*(p-pi))
     return func
 
+def q(k,kr,h,mu,b,p,pwf,delchi):
+    return ((7.08e-3)*k*kr*h/(mu*b))*((p - pwf)/(0.5*delchi))
+
+
 #Initialize nodes
 delchi = dchi(sim_props['N'],res_props['rw'],res_props['re'])
 chi = chinodes(sim_props['N'],delchi,res_props['rw'])
@@ -179,7 +184,7 @@ Kro = Pmat[:,:,2]
 Krw = Pmat[:,:,3]
 
 #Pmat[0,-1,2] = kro(Pmat[0,-1,1])
-Pmat[0,-1,3] = 1 #krw(Pmat[0,-1,1])
+#Pmat[0,-1,3] = 1 #krw(Pmat[0,-1,1])
 print("KRO: \n",Pmat[0,:,2])
 print("KRW: \n", Pmat[0,:,3])
 #Initialize Bo
@@ -188,28 +193,28 @@ Pmat[0,:,4] = bo_p(Pmat[0,:,0])
 Pmat[0,:,5] = bw_p(Pmat[0,:,0])
 
 #Initialize Left Node Lambda o West
-Pmat[0,0,6] = res_props['k']*Pmat[0,0,2]/(res_props['muo']*bo_p((Pmat[0,0,0] + res_props['pwf'])/2))
+Pmat[0,0,6] = res_props['k']*kro(Pmat[0,0,1])/(res_props['muo']*bo_p((Pmat[0,0,0] + res_props['pwf'])/2))
 #Initialize Remaining Lambda o Wests
-Pmat[0,1:,6] = res_props['k']*Pmat[0,:-1,2]/(res_props['muo']*bo_p((Pmat[0,:-1,0] + Pmat[0,1:,0])/2))
+Pmat[0,1:,6] = res_props['k']*kro(Pmat[0,1:,1])/(res_props['muo']*bo_p((Pmat[0,:-1,0] + Pmat[0,1:,0])/2))
 print("Pmat[i,:,6], Lambda_o West: \n",Pmat[0,:,6])
 #Initialize Right Node Lambda o East
-Pmat[0,-1,7] = res_props['k']*Pmat[0,-1,2]/(res_props['muo']*bo_p(3000))
+Pmat[0,-1,7] = res_props['k']*kro(Pmat[0,-1,1])/(res_props['muo']*bo_p(3000))
 
 #Initialize Remaining Lambda o Easts
-Pmat[0,:-1,7] = res_props['k']*Pmat[0,:-1,2]/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
+Pmat[0,:-1,7] = res_props['k']*kro(Pmat[0,1:,1])/(res_props['muo']*bo_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 print("Pmat[i,:,7], Lambda_o East: \n",Pmat[0,:,7])
 
 #Initialize Left Node Lambda w West
-Pmat[0,0,8] = res_props['k']*Pmat[0,0,3]/(res_props['muw']*bw_p((Pmat[0,0,0] res_props['pwf'])/2))
+Pmat[0,0,8] = res_props['k']*krw(Pmat[0,0,1])/(res_props['muw']*bw_p((Pmat[0,0,0] + res_props['pwf'])/2))
 
 #Initialize Remaining Lambda w Wests
-Pmat[0,1:,8] = res_props['k']*krw(Pmat[0,1:,0])/(res_props['muw']*bw_p((Pmat[0,:-1,0] + Pmat[0,1:,0])/2))
+Pmat[0,1:,8] = res_props['k']*krw(Pmat[0,1:,1])/(res_props['muw']*bw_p((Pmat[0,:-1,0] + Pmat[0,1:,0])/2))
 
 #Initialize Right Node Lambda w East
-Pmat[0,-1,9] = res_props['k']*Pmat[0,-1,3]/(res_props['muw']*bw_p((Pmat[0,-1,0] + res_props['pa'])/2))
+Pmat[0,-1,9] = res_props['k']*krw(Pmat[0,-1,1])/(res_props['muw']*bw_p((Pmat[0,-1,0] + res_props['pa'])/2))
 
 #Initialize Remaining Lambda w Easts
-Pmat[0,:-1,9] = res_props['k']*Pmat[0,:-1,3]/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
+Pmat[0,:-1,9] = res_props['k']*krw(Pmat[0,1:,1])/(res_props['muw']*bw_p((Pmat[0,1:,0] + Pmat[0,:-1,0])/2))
 
 #Initialize phi
 Pmat[0,:,10] = phi_p(Pmat[0,:,0])
@@ -221,6 +226,7 @@ Pmat[0,:,11] = ct(Pmat[0,:,1],1 - Pmat[0,:,1])
 # for i in range(sim_props['T']/sim_props['tstep'])
 
 for i in range(sim_props['T']):
+
     ################ PRESSURE CALCULATION STEP ################################
     alpha = (158*np.exp(2*chi[1:-1])*Pmat[i,:,10]*Pmat[i,:,11]*(delchi*delchi))
     alpha[0] *= 3
@@ -251,14 +257,20 @@ for i in range(sim_props['T']):
     #F = np.eye(sim_props['N'],k=-1)*A + np.eye(sim_props['N'],k=0)*B + np.eye(sim_props['N'],k=1)*C
     #print("NP LINALG SOLVE SOLUTION: \n",np.linalg.solve(F,D))
     Pmat[i+1,:,0] = E
+
+
     ###########VALUE UPDATE STEPS########################
     #print((Pmat[i, 1:, 0] + Pmat[i, :-1, 0])/2)
+
     # Update phi
     Pmat[i+1, :, 10] = phi_p(Pmat[i+1, :, 0])
+
     # Update Bo
     Pmat[i+1, :, 4] = bo_p(Pmat[i+1, :, 0])
+
     # Update Bw
     Pmat[i+1, :, 5] = bw_p(Pmat[i+1, :, 0])
+
     #Update Sw
     Pmat[i+1,0,1] = (Pmat[i+1,0,5]/Pmat[i+1,0,10])*((Pmat[i,0,10]*Pmat[i,0,1]/Pmat[i,0,5]) +
                     (8*Pmat[i,0,8]*res_props['pwf'] - (8*Pmat[i,0,8] + 4*Pmat[i,0,9])*Pmat[i+1,0,0] +
@@ -278,36 +290,38 @@ for i in range(sim_props['T']):
 
 
 
-    # Initialize Left Node Lambda o West
-    Pmat[i+1, 0, 6] = res_props['k'] * kro(Pmat[i+1,0,1]) / (res_props['muo'] * bo_p(Pmat[i+1, 0, 0]))
-    # Initialize Remaining Lambda o Wests
-    Pmat[i+1, 1:, 6] = res_props['k'] * Pmat[i+1, :-1, 2] / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
-    #print("Pmat[i,:,6], Lambda_o West: \n", Pmat[i+1, :, 6])
-    # Initialize Right Node Lambda o East
-    Pmat[i+1, -1, 7] = res_props['k'] * Pmat[i+1, -1, 2] / (res_props['muo'] * bo_p(Pmat[i+1, -1, 0]))
+    # Update Left Node Lambda o West
+    Pmat[i+1, 0, 6] = res_props['k'] * kro(Pmat[i+1,0,1]) / (res_props['muo'] * bo_p((Pmat[i+1, 0, 0] + float(res_props['pwf']))/2))
 
-    # Initialize Remaining Lambda o Easts
-    Pmat[i+1, :-1, 7] = res_props['k'] * Pmat[i+1, :-1, 2] / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    # Initialize Remaining Lambda o Wests
+    Pmat[i+1, 1:, 6] = res_props['k'] * kro(Pmat[i+1, 1:, 1]) / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    #print("Pmat[i,:,6], Lambda_o West: \n", Pmat[i+1, :, 6])
+
+    # Update Right Node Lambda o East
+    Pmat[i+1, -1, 7] = res_props['k'] * kro(Pmat[i+1, -1, 1]) / (res_props['muo'] * bo_p((Pmat[i+1, -1, 0] + float(res_props['pa']))/2))
+
+    # Update Remaining Lambda o Easts
+    Pmat[i+1, :-1, 7] = res_props['k'] * kro(Pmat[i+1, 1:, 1]) / (res_props['muo'] * bo_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
     #print("Pmat[i,:,7], Lambda_o East: \n", Pmat[i+1, :, 7])
 
     # Update Left Node Lambda w West
     Pmat[i+1, 0, 8] = res_props['k'] * krw(Pmat[i+1,0,1]) / (res_props['muw'] * bw_p((Pmat[i+1, 0, 0] + res_props['pwf'])/2))
 
     # Update Remaining Lambda w Wests
-    Pmat[i+1, 1:, 8] = res_props['k'] * krw(Pmat[i+1, :1, 1]) / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    Pmat[i+1, 1:, 8] = res_props['k'] * krw(Pmat[i+1, 1:, 1]) / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
 
     # Update Right Node Lambda w East
-    Pmat[i+1, -1, 9] = res_props['k'] * Pmat[i+1, -1, 3] / (res_props['muw'] * bw_p(Pmat[i+1, -1, 0]))
+    Pmat[i+1, -1, 9] = res_props['k'] * krw(Pmat[i+1, -1, 1]) / (res_props['muw'] * bw_p((Pmat[i+1, -1, 0] + res_props['pa'])/2))
 
     # Update Remaining Lambda w Easts
-    Pmat[i+1, :-1, 9] = res_props['k'] * Pmat[i+1, :-1, 3] / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
+    Pmat[i+1, :-1, 9] = res_props['k'] * krw(Pmat[i+1, 1:, 1]) / (res_props['muw'] * bw_p((Pmat[i+1, 1:, 0] + Pmat[i+1, :-1, 0]) / 2))
 
 
 
     # Update ct
     Pmat[i+1, :, 11] = ct(Pmat[i+1, :, 1], 1 - Pmat[i+1, :, 1])
     ############################################################################################
-    print("B : ",i+1,Pmat[i+1,:,6:10])
+    print("Lambda : ",i+1,Pmat[i+1,:,6:10])
 
 
 #pl.plot(chi[1:-1],E)
@@ -333,40 +347,75 @@ for i in range(sim_props['T']):
 #print("Initial Pressures: \n",Pmat[0,:,0])
 
 #print(Pmat[:,:,8])
-for row in Pmat[:,:,0]:
-    pl.plot(chi,[1000,*row,3000])
+
+colormap = mpl.cm.gist_ncar
+pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+for i,row in enumerate(Pmat[:,:,0]):
+    pl.plot(chi,[1000,*row,3000], label='t = {}'.format(i))
+pl.title('Pressure, T = {}'.format(sim_props['T']))
+pl.xlabel(r'$\chi$')
+pl.ylabel('Pressure')
+pl.legend(prop={'size':6}, ncol=4,loc='best')
 pl.show()
 
-for row in Pmat[:,:,0]:
-    pl.plot(np.exp(chi),[1000,*row,3000])
-pl.title('Pressure, T=%f'.format(sim_props['T']))
+pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+for i,row in enumerate(Pmat[:,:,0]):
+    pl.plot(np.exp(chi),[1000,*row,3000], label='t = {}'.format(i))
+pl.title('Pressure, T = {}'.format(sim_props['T']))
+pl.xlabel('R')
+pl.ylabel('Pressure')
+pl.legend(prop={'size':6},ncol=4, loc='best')
 pl.show()
 
-for row in Pmat[:,:,1]:
-    pl.plot(np.exp(chi[1:-1]),row)
-pl.title('Sw')
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for row in Pmat[:,:,1]:
+#     pl.plot(np.exp(chi[1:-1]),row)
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# pl.title('Sw')
+# pl.show()
+#
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for row in Pmat[:,:,6]:
+#     pl.plot(np.exp(chi[1:-1]),row)
+# pl.title('Lambda_oW')
+# pl.show()
+#
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for row in Pmat[:,:,7]:
+#     pl.plot(np.exp(chi[1:-1]),row)
+# pl.title('Lambda_oE')
+# pl.show()
+#
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for row in Pmat[:,:,8]:
+#     pl.plot(np.exp(chi[1:-1]),row)
+# pl.title('Lambda_wW')
+# pl.show()
+#
+# pl.gca().set_color_cycle([colormap(i) for i in np.linspace(0,0.9,sim_props['T'])])
+# for row in Pmat[:,:,9]:
+#     pl.plot(np.exp(chi[1:-1]),row)
+# pl.title('Lambda_wE')
+# pl.show()
+
+qo = q(res_props['k'],kro(Pmat[1:,0,1]),res_props['h'],res_props['muo'],bo_p(Pmat[1:,0,0]),Pmat[1:,0,0],res_props['pwf'],delchi)
+qw = q(res_props['k'],krw(Pmat[1:,0,1]),res_props['h'],res_props['muw'],bw_p(Pmat[1:,0,0]),Pmat[1:,0,0],res_props['pwf'],delchi)
+print(qw)
+print(qo)
+WOR = qw/qo
+pl.plot(qo)
+pl.plot(qw)
+pl.xlabel('time')
+pl.ylabel('Q')
+pl.legend()
+pl.title('Rate vs Time')
 pl.show()
 
-for row in Pmat[:,:,6]:
-    pl.plot(np.exp(chi[1:-1]),row)
-pl.title('Lambda_oW')
-pl.show()
-
-for row in Pmat[:,:,7]:
-    pl.plot(np.exp(chi[1:-1]),row)
-pl.title('Lambda_oE')
-pl.show()
-
-for row in Pmat[:,:,8]:
-    pl.plot(np.exp(chi[1:-1]),row)
-pl.title('Lambda_wW')
-pl.show()
-
-for row in Pmat[:,:,9]:
-    pl.plot(np.exp(chi[1:-1]),row)
-pl.title('Lambda_wE')
+pl.plot(WOR)
+pl.title('WOR vs Time')
 pl.show()
 print(Pmat[:,:,8])
+print(type(res_props['pwf']))
 # if __name__ == '__main__':
 #     res_props = dict(N=10,rw=0.25,re=1500,h=50,pi=3000,pa=3000,pwf=1000,k=10,phi=0.2,muo=2,muw=1,c_phi=1.0e-5,c_o=1.5e-5,c_w=0.3e-5,Boi=1.25,Bwi=1.05,Swi=0.25,Sawi=1,BC=[1000,3000])
 #     print(res_props)
